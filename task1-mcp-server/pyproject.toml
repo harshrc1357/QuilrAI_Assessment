@@ -1,0 +1,58 @@
+[project]
+name = "customer-mcp"
+version = "0.1.0"
+description = "MCP stdio server exposing customer lookup and refund tools with strict input validation"
+readme = "README.md"
+authors = [
+    { name = "Harsh Chauhan", email = "75563731+harshrc1357@users.noreply.github.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.3.0",
+    "pydantic>=2.14.3",
+]
+
+[project.scripts]
+customer-mcp = "customer_mcp.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "bandit[toml]>=1.9.4",
+    "pytest>=9.2.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "unit: fast tests on the Pydantic schemas",
+    "integration: in-process MCP client against the real server",
+    "e2e: real subprocess over the stdio transport",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "T20"]
+
+[tool.coverage.run]
+source = ["customer_mcp"]
+# The e2e tests run the server as a subprocess; measure that process too.
+patch = ["subprocess"]
+parallel = true
+sigterm = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 90
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
