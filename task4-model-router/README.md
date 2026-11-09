@@ -86,7 +86,7 @@ with the secondary's reply.
 
 Each provider gets its own model name and API key. The tenant's key is never sent upstream.
 
-### Error payload
+### Error mapping
 
 Every error has this shape, and its `request_id` is also in the `x-request-id` header:
 

@@ -68,7 +68,7 @@ Notes on the choices:
 - The pattern uses `[0-9]`, not `\d`. Pydantic's Rust regex engine treats `\d` as *any* Unicode
   digit, so `\d` would accept `CUST-١٢٣٤٥`. A test pins this.
 - `amount` is a money value, so more than two decimal places is rejected, not rounded. The
-  ceiling (`MAX_REFUND_AMOUNT` in `schemas.py`) stops absurd values such as `1e20`.
+  ceiling (`MAX_REFUND_AMOUNT` in `schemas.py`) stops unrealistic values such as `1e20`.
 - `reason` is trimmed before the length check, so ten spaces cannot pass the 10-character rule.
   Unicode categories `Cc` (control) and `Cf` (format) are rejected, so invisible text such as
   zero-width spaces cannot pass the length rule either, and bidi overrides or terminal escape
@@ -186,54 +186,20 @@ The tests sit at three seams, from fastest to most realistic:
 | `tests/test_server.py` | Official SDK `Client`, connected in-process to `build_server()` | `integration` | `tools/list` schemas and hints, results, `-32602` and `-32603` with their `data`, no leaks | Protocol compliance, Validation |
 | `tests/test_stdio.py` | Real `python -m customer_mcp` subprocess, raw newline-delimited JSON-RPC | `e2e` | Stdout purity, logs on stderr, wire-level errors, clean shutdown | STDIO isolation, Protocol compliance |
 
-What is in each file:
+**Schemas** ([`tests/test_schemas.py`](tests/test_schemas.py), 63 tests): every rejected
+example in the validation table, the exact boundaries (`0.01`, `1,000,000`, 10 and 500
+characters), all invalid fields reported together, and immutable validated input.
 
-**`test_schemas.py`**
-- `customer_id`: valid IDs; 12 malformed strings (length, case, missing dash, whitespace,
-  trailing newline, Unicode digits, unanchored prefix); non-string types; missing field;
-  unknown extra field.
-- `amount`: valid values from `0.01` to the `1,000,000` ceiling; zero, negative zero,
-  negatives, `NaN`, `±Infinity`, three decimals, sub-cent, above the ceiling, `1e20`,
-  numeric string, boolean, `null`.
-- `reason`: exactly 10 and exactly 500 characters; multi-line text; whitespace trimming;
-  9 characters, whitespace-only, non-breaking spaces only, zero-width spaces only, bidi
-  override, NUL byte, ANSI escape, short after trim, 501 characters, empty, integer, `null`.
-- Shape: all invalid fields are reported together; extra fields rejected; validated input is
-  immutable.
+**Server** ([`tests/test_server.py`](tests/test_server.py), 24 tests): the advertised schemas
+and hints, structured results, `isError` for an unknown customer, `-32602` with the failing
+fields, an unknown tool, and `-32603` for a failing database read or write. No error repeats
+a rejected value, an unexpected key name, or the exception text.
 
-**`test_server.py`**
-- `tools/list` returns exactly the two tools, with `pattern`, `exclusiveMinimum`, `maximum`,
-  `minLength`, `maxLength`, `required`, and `additionalProperties: false` in the input schema,
-  and the correct read-only and idempotent hints.
-- Successful calls return `structuredContent`; each refund gets a unique `refund_id`.
-- An unknown customer gives `isError: true` for both tools.
-- Invalid arguments and boundary violations give `-32602` with the exact failing fields in
-  `data`. A missing `arguments` object also gives `-32602`.
-- The error `data` does not echo a rejected value or an unexpected key name (XSS-style
-  payloads are used).
-- An unknown tool gives `-32602`, with the tool name in the message.
-- A failing database read (lookup) and a failing database write (refund) both give `-32603`,
-  and the password inside the exception text appears nowhere in the error.
-
-**`test_stdio.py`**
-- A full session (initialize, list, success, invalid, not found) writes only JSON-RPC 2.0 lines
-  to stdout and exits with code 0.
-- Logs reach stderr. Argument values, unknown customer IDs, and a caller-chosen key that
-  contains a newline and a fake log line never appear in the logs or the error.
-- A handler that calls `print()` does not corrupt stdout; the text appears on stderr.
-- A static AST scan finds no `print()` and no `sys.stdout` outside the entry point.
-- Wire protocol: `initialize` handshake, structured results, `-32602` with field data,
-  `isError` for an unknown customer, `-32601` for an unknown method, `-32602` for an unknown
-  tool.
-- Malformed `tools/call` params (string `arguments`, list `arguments`, missing `name`,
-  non-string `name`, missing `params`) give `-32602`.
-- Malformed input: invalid JSON and a blank line give `-32700`, and the server keeps serving;
-  five kinds of invalid request objects give `-32600` with the `id` echoed when present; five
-  kinds of invalid or missing `id` give `-32600` with `id: null`.
-- A genuine notification (`notifications/cancelled`) gets no reply.
-- The official SDK `Client` works over stdio, through its default `server/discover`
-  negotiation.
-- The server exits with code 0 when stdin closes.
+**Stdio** ([`tests/test_stdio.py`](tests/test_stdio.py), 33 tests): a full session writes only
+JSON-RPC lines to stdout; logs reach stderr with no argument values or forged lines; a stray
+`print()` in a handler goes to stderr; an AST scan finds no `print()` in the source; each wire
+error in the error mapping table; a real notification gets no reply; the official SDK `Client`
+connects; and the server exits with code 0 when stdin closes.
 
 ## How to run
 
@@ -325,7 +291,7 @@ Security scan:
 uv run bandit -c pyproject.toml -r src
 ```
 
-## Assumptions
+## Assumptions and decisions
 
 - `CUST-XXXXX` means the literal prefix `CUST-` followed by exactly five ASCII digits.
 - "Positive float" accepts JSON integers too (`10` is a valid amount); JSON has one number type.
