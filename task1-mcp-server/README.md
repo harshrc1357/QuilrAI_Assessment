@@ -176,7 +176,7 @@ Sample customers: `CUST-12345` (Ada Lovelace), `CUST-00001` (Alan Turing), `CUST
 it fails below 90%. Each failure message names the field, the error code, or the exact stray
 stdout line, so a failure points at the fix.
 
-Tested on Windows 11 with Python 3.11.
+Tested on Windows 11 with Python 3.12.
 
 The tests sit at three seams, from fastest to most realistic:
 
